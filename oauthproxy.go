@@ -261,7 +261,7 @@ func (p *OauthProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	log.Printf("%s %s %s", remoteIP, req.Method, req.URL.Path)
 
 	var ok bool
-	var user string
+	var user, email string
 
 	if req.URL.Path == signInPath {
 		redirect, err := p.GetRedirect(req)
@@ -335,31 +335,22 @@ func (p *OauthProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if !ok {
 		cookie, err := req.Cookie(p.CookieKey)
 		if err == nil {
-			var email string
 			email, ok = validateCookie(cookie, p.CookieSeed)
 			user = strings.Split(email, "@")[0]
 		}
 	}
 
 	if !ok {
-		user, ok = p.CheckBasicAuth(req)
-		// if we want to promote basic auth requests to cookie'd requests, we could do that here
-		// not sure that would be ideal in all circumstances though
-		// if ok {
-		// 	p.SetCookie(rw, req, user)
-		// }
-	}
-
-	if !ok {
 		log.Printf("invalid cookie")
-		p.SignInPage(rw, req, 403)
+		// no need to ask, just redirect
+		http.Redirect(rw, req, p.GetLoginURL(req.URL.Path), 302)
 		return
 	}
 
 	// At this point, the user is authenticated. proxy normally
 	if *passBasicAuth {
 		req.SetBasicAuth(user, "")
-		req.Header["X-Forwarded-User"] = []string{user}
+		req.Header["X-Forwarded-User"] = []string{email}
 	}
 
 	p.serveMux.ServeHTTP(rw, req)
