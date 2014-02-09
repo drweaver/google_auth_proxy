@@ -1,12 +1,10 @@
-google_auth_proxy
-=================
-
 A reverse proxy that provides authentication using Google OAuth2 to validate 
 individual accounts, or a whole google apps domain.
 
 Forked from [bitly/google_auth_proxy](https://github.com/bitly/google_auth_proxy) with support added for:
 * SSL (thus no need for Nginx)
-* HTTP redirect to SSL
+* Additional listener to redirect HTTP requests to SSL port
+* Auto redirect to Google OAuth
 * Pre-compiled Raspberry Pi (Raspbian) binaries to be used in 
   conjunction with [Garage Control Service](https://github.com/drweaver/py_garage_server)
 
@@ -90,7 +88,7 @@ export google_auth_cookie_secret=...
 
 ./google_auth_proxy \
    --redirect-url="https://yourcompany.com/oauth2/callback"  \
-   --google-apps-domain="yourcompany.com"  \
+   --authenticated-emails-file="oauth_users" \
    --upstream=http://127.0.0.1:5100/gc/ \
    --ssl-domain="yourcompany.com" \
    --ssl-cert="ssl.crt" \
@@ -100,7 +98,12 @@ export google_auth_cookie_secret=...
    --ssl-redirect="yourcompany.com:443"
 ```
 
-To use default HTTP (80)/ HTTPS (443) ports the app requires root privileges.  Recommend using IP 
+This specific command requires 3 files in the current directory:
+* **oauth_users** a text file containing google email addresses of authorised users on each line
+* **ssl.crt** an SSL certificate - you can create it yourself (unverified) or via e.g. [startSSL](www.startssl.com)
+* **ssl.key** the SSL certificate key file corresponding to the above certificate
+
+To use default HTTP (80) / HTTPS (443) ports the app requires root privileges.  Recommend using IP 
 tables to perform internal port forwarding to non-privileged ports.  To redirect port 80 to 8080 
 and 443 to 8443 use following commands:
 
@@ -109,7 +112,7 @@ sudo iptables -A PREROUTING -t nat -p tcp --dport 80 -j REDIRECT --to-port 8080
 sudo iptables -A PREROUTING -t nat -p tcp --dport 443 -j REDIRECT --to-port 8443
 ```
 
-google_auth_proxy can now be run as normal user with arguments --http-address=":8080" 
+With these commands google_auth_proxy can now be run as normal user with arguments --http-address=":8080" 
 and/or --https-address=":8443" but still accessed via 80 and 443.  When using this configuration the 
 --ssl-redirect argument should match the externally facing domain and port i.e. yourcompany.com:443
 
