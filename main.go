@@ -1,13 +1,14 @@
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -25,6 +26,11 @@ var (
 	cookieDomain            = flag.String("cookie-domain", "", "an optional cookie domain to force cookies to")
 	googleAppsDomain        = flag.String("google-apps-domain", "", "authenticate against the given google apps domain")
 	authenticatedEmailsFile = flag.String("authenticated-emails-file", "", "authenticate against emails via file (one per line)")
+	sslDomain               = flag.String("ssl-domain", "", "Enable SSL and use provided domain")
+	sslCrt                  = flag.String("ssl-cert", "./ssl.crt", "SSL certificate filename")
+	sslCrtKey               = flag.String("ssl-cert-key", "./ssl.key", "SSL Certificate key filename")
+	httpsAddr               = flag.String("https-address", "", "Enables SSL on <addr>:<port> to listen on for HTTPS clients")
+	sslRedirect             = flag.String("ssl-redirect", "", "redirect traffic (HTTP 301) from http-address to https://<addr>:<port>")
 	upstreams               = StringArray{}
 )
 
@@ -64,6 +70,20 @@ func main() {
 	if *clientSecret == "" {
 		log.Fatal("missing --client-secret")
 	}
+	if *httpsAddr != "" {
+		if *sslDomain == "" {
+			log.Fatal("missing --ssl-domain in combination with --https-address")
+		}
+		if *sslCrt == "" {
+			log.Fatal("missing --ssl-cert in combination with --https-address")
+		}
+		if *sslCrtKey == "" {
+			log.Fatal("missing --ssl-cert-key in combination with --https-address")
+		}
+	}
+	if *sslRedirect != "" && *httpAddr == "" {
+		log.Fatal("missing --http-address in combination with --ssl-redirect")
+	}
 
 	var upstreamUrls []*url.URL
 	for _, u := range upstreams {
@@ -90,12 +110,45 @@ func main() {
 			log.Fatalf("FATAL: unable to open %s %s", *htpasswdFile, err.Error())
 		}
 	}
-	listener, err := net.Listen("tcp", *httpAddr)
+	var listener net.Listener
+	if *httpsAddr != "" {
+		// SSL
+		cert, err := tls.LoadX509KeyPair(*sslCrt, *sslCrtKey)
+		if err != nil {
+			log.Fatalf("FATAL: Unable to load SSL cert/key: %s", err.Error())
+		}
+		var TLSconfig *tls.Config
+		TLSconfig = &tls.Config{
+			Certificates: []tls.Certificate{cert},
+			ServerName: *sslDomain}
+		listener, err = tls.Listen("tcp", *httpsAddr, TLSconfig)
+		log.Printf("listening on %s", *httpsAddr)
+		
+		if *sslRedirect != "" {
+			redirectToSSL := func(w http.ResponseWriter, r *http.Request) {
+				url := *r.URL
+				url.Scheme = "https"
+				url.Host = *sslRedirect
+				log.Printf("Redirecting %s to %s", r.URL.String(), url.String())
+				http.Redirect( w, r, url.String(), http.StatusMovedPermanently )
+			}
+			go func() {
+			    if err := http.ListenAndServe(*httpAddr, http.HandlerFunc(redirectToSSL)); err != nil {
+					log.Fatalf("ListenAndServe error: %v", err)
+	        	}
+			}()
+			log.Printf("Redirecting %s to %s", *httpAddr, *httpsAddr)
+		}
+		
+	} else {
+		// HTTP
+		listener, err = net.Listen("tcp", *httpAddr)
+		log.Printf("listening on %s", *httpAddr)
+	}
 	if err != nil {
 		log.Fatalf("FATAL: listen (%s) failed - %s", *httpAddr, err.Error())
 	}
-	log.Printf("listening on %s", *httpAddr)
-
+	
 	server := &http.Server{Handler: oauthproxy}
 	err = server.Serve(listener)
 	if err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
