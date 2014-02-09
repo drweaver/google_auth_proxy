@@ -1,29 +1,47 @@
 google_auth_proxy
 =================
 
-
 A reverse proxy that provides authentication using Google OAuth2 to validate 
 individual accounts, or a whole google apps domain.
 
-[![Build Status](https://secure.travis-ci.org/bitly/google_auth_proxy.png?branch=master)](http://travis-ci.org/bitly/google_auth_proxy)
+Forked from [bitly/google_auth_proxy](https://github.com/bitly/google_auth_proxy) with support added for:
+* SSL (thus no need for Nginx)
+* HTTP redirect to SSL
+* Pre-compiled Raspberry Pi (Raspbian) binaries to be used in 
+  conjunction with [Garage Control Service](https://github.com/drweaver/py_garage_server)
 
+Free SSL certificate can be created from [startSSL](http://www.startssl.com/)
+
+[**Download** pre-compiled Raspberry Pi (Raspbian) binaries](https://github.com/drweaver/google_auth_proxy/releases/latest)
+
+## Cross-compiling for Raspberry Pi
+
+On mac or linux:
+
+Firstly, in the GO src directory execute the following command to 
+build libraries GO needs to perform the cross-compilation, this only needs to be done once:
+```bash
+GOOS=linux GOARCH=arm GOARM=5 make.bash
+```
+
+Back in the google_auth_proxy folder run:
+```bash
+GOOS=linux GOARCH=arm GOARM=5 go build
+```
+
+Now copy google_auth_proxy binary to your Raspberry Pi for execution
 
 ## Architecture
 
 ```
-    _______       ___________________       __________
-    |Nginx| ----> |google_auth_proxy| ----> |upstream| 
-    -------       -------------------       ----------
+                  ___________________       __________
+                  |google_auth_proxy| ----> |upstream| 
+                  -------------------       ----------
                           ||
                           \/
                   [google oauth2 api]
 ```
 
-
-## Installation
-
-1. [Install Go](http://golang.org/doc/install)
-2. `$ go get github.com/bitly/google_auth_proxy`. This should put the binary in `$GOROOT/bin`
 
 ## OAuth Configuration
 
@@ -52,49 +70,48 @@ Usage of ./google_auth_proxy:
   -redirect-url="": the OAuth Redirect URL. ie: "https://internalapp.yourcompany.com/oauth2/callback"
   -upstream=[]: the http url(s) of the upstream endpoint. If multiple, routing is based on path
   -version=false: print version string
+  -ssl-domain="": the domain registered with your SSL certificate
+  -ssl-cert="": the file containing your ssl certificate
+  -ssl-cert-key="": the ssl key file
+  -https-address="": enables SSL option on given <addr>:<port> to listen on for HTTPS clients
+  -ssl-redirect="": the domain:port to redirect incoming requests that go to -http-address
 ```
 
 
 ## Example Configuration
 
-This example has a [Nginx](http://nginx.org/) SSL endpoint proxying to `google_auth_proxy` on port `4180`. 
-`google_auth_proxy` then authenticates requests for an upstream application running on port `8080`. The external 
-endpoint for this example would be `https://internal.yourcompany.com/`.
-
-An example Nginx config follows. Note the use of `Strict-Transport-Security` header to pin requests to SSL 
-via [HSTS](http://en.wikipedia.org/wiki/HTTP_Strict_Transport_Security):
-
-```
-server {
-    listen 443 default ssl;
-    server_name internal.yourcompany.com;
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/cert.key;
-    add_header Strict-Transport-Security max-age=1209600;
-
-    location / {
-        proxy_pass http://127.0.0.1:4180;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Scheme $scheme;
-        proxy_connect_timeout 1;
-        proxy_send_timeout 30;
-        proxy_read_timeout 30;
-    }
-}
-```
-
 The command line to run `google_auth_proxy` would look like this:
 
 ```bash
+
+export google_auth_client_id=...
+export google_auth_secret=...
+export google_auth_cookie_secret=...
+
 ./google_auth_proxy \
-   --redirect-url="https://internal.yourcompany.com/oauth2/callback"  \
+   --redirect-url="https://yourcompany.com/oauth2/callback"  \
    --google-apps-domain="yourcompany.com"  \
-   --upstream=http://127.0.0.1:8080/ \
-   --cookie-secret=... \
-   --client-id=... \
-   --client-secret=...
+   --upstream=http://127.0.0.1:5100/gc/ \
+   --ssl-domain="yourcompany.com" \
+   --ssl-cert="ssl.crt" \
+   --ssl-cert-key="ssl.key" \
+   --http-address=":8080" \
+   --https-address=":8443" \
+   --ssl-redirect="yourcompany.com:443"
 ```
+
+To use default HTTP (80)/ HTTPS (443) ports the app requires root privileges.  Recommend using IP 
+tables to perform internal port forwarding to non-privileged ports.  To redirect port 80 to 8080 
+and 443 to 8443 use following commands:
+
+```bash
+sudo iptables -A PREROUTING -t nat -p tcp --dport 80 -j REDIRECT --to-port 8080
+sudo iptables -A PREROUTING -t nat -p tcp --dport 443 -j REDIRECT --to-port 8443
+```
+
+google_auth_proxy can now be run as normal user with arguments --http-address=":8080" 
+and/or --https-address=":8443" but still accessed via 80 and 443.  When using this configuration the 
+--ssl-redirect argument should match the externally facing domain and port i.e. yourcompany.com:443
 
 ## Environment variables
 
