@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/drweaver/google_auth_proxy.png?branch=master)](https://travis-ci.org/drweaver/google_auth_proxy)
+
 A reverse proxy that provides authentication using Google OAuth2 to validate 
 individual accounts, or a whole google apps domain.
 
