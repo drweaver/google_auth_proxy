@@ -16,6 +16,8 @@ Free SSL certificate can be created from [startSSL](http://www.startssl.com/)
 
 ## Cross-compiling for Raspberry Pi
 
+installing and compiling GO apps directly on R-Pi is unable and unreliable (at least right now).  The best approach is to use a well known architecture and [cross-compiling](http://en.wikipedia.org/wiki/Cross_compiler) for the R-Pi.
+
 On mac or linux:
 
 Firstly, in the GO src directory execute the following command to 
@@ -29,7 +31,7 @@ Back in the google_auth_proxy folder run:
 GOOS=linux GOARCH=arm GOARM=5 go build
 ```
 
-Now copy google_auth_proxy binary to your Raspberry Pi for execution
+Now copy google_auth_proxy binary to your Raspberry Pi for execution.
 
 ## Architecture
 
